@@ -1,20 +1,11 @@
 from flask import Flask, request, abort
 from slackbot.bot import Bot
 from slackbot.bot import listen_to      # チャネル内発言で反応するデコーダ
-from slackbot.bot import respond_to     # @botname: で反応するデコーダ
-from slackbot.bot import default_reply  # 該当する応答がない場合に反応するデコーダ
 import requests
 import threading
-#
-from linebot import (
-    LineBotApi, WebhookHandler
-)
-from linebot.exceptions import (
-    InvalidSignatureError
-)
-from linebot.models import (
-    MessageEvent, TextMessage, TextSendMessage,
-)
+from linebot import LineBotApi, WebhookHandler
+from linebot.exceptions import InvalidSignatureError
+from linebot.models import MessageEvent, TextMessage, TextSendMessage
 import os
 import pickle
 
@@ -29,33 +20,33 @@ class CLAS:
         self.read_clas_data()    # 保存されているファイルから情報を読み取る
 
     # 新規のCLASグループを作成
-    def create_group(self, target, channel_id):
+    def create_group(self, channel_id, sns_name):
         if channel_id in self.clas_index:
             return 'すでにグループに所属しています。\n一つのグループにしか所属はできません'
         clas_id = str(self.clas_group_id)
         self.clas_group_list[clas_id] = {'slack':[], 'line':[], 'database':[]}
-        self.join_group(clas_id, target, channel_id)
+        self.join_group(clas_id, sns_name, channel_id)
         self.clas_group_id += 1
         return clas_id
     
     # 既存のCLASグループに参加
-    def join_group(self, clas_id, target, channel_id):
+    def join_group(self, clas_id, channel_id, sns_name):
         if channel_id in self.clas_index:
             return 'すでにグループに所属しています。\n一つのグループにしか所属はできません'
         if clas_id in self.clas_group_list:
-            if channel_id in self.clas_group_list[clas_id][target]:
+            if channel_id in self.clas_group_list[clas_id][sns_name]:
                 return 'そのグループはすでに登録されています'
             else:
-                self.clas_group_list[clas_id][target].append(channel_id)
+                self.clas_group_list[clas_id][sns_name].append(channel_id)
                 self.clas_index[channel_id] = clas_id
                 return '追加が完了しました'
         else:
             return 'そのIDのグループは存在しません'
 
     # CLASグループから抜ける
-    def leave_group(self, channel_id, target):
+    def leave_group(self, channel_id, sns_name):
         clas_id = self.get_clas_id(channel_id)
-        self.clas_group_list[clas_id][target].remove(channel_id)
+        self.clas_group_list[clas_id][sns_name].remove(channel_id)
         del self.clas_index[channel_id]
         return "グループ{}を抜けました".format(clas_id)
 
@@ -84,23 +75,23 @@ class CLAS:
             pass
 
     # スラック側のグループにメッセージを送信
-    def send2slack(self, channel_id, message):
+    def send2slack(self, channel_id, text):
         clas_id = self.get_clas_id(channel_id)
         for slack_channel in self.clas_group_list[clas_id]['slack']:
             if slack_channel == channel_id: # 送信元と同じ場合スキップ
                 continue
-            params = {"token": self._slack_token, "channel": slack_channel, "text": message}
+            params = {"token": self._slack_token, "channel": slack_channel, "text": text}
             r = requests.get('https://slack.com/api/chat.postMessage',
                             headers=self._slack_headers,
                             params=params)
             print("return ", r.json())
 
     # データベースの中から条件に該当するメッセージをリストにして返す
-    def search_database(self, channel_id, target, text, count=10):
+    def search_database(self, channel_id, sns_name, text, count=10):
         search_list = []
         clas_id = self.get_clas_id(channel_id)
         for data in reversed(self.clas_group_list[clas_id]['database']):
-            if text in data[target]:
+            if text in data[sns_name]:
                 search_list.append(str(data))
                 if len(search_list)>=count:
                     break
@@ -119,39 +110,38 @@ class CLAS:
             pickle.dump(self.clas_group_list, f)
 
     # データベースにメッセージ情報を取得
-    def add_database(self, channel_id, message):
-        data = message.split(':')
+    def add_database(self, channel_id, text):
+        data = text.split(':')
         clas_id = self.get_clas_id(channel_id)
         self.clas_group_list[clas_id]['database'].append(data)
         self.write_clas_data()
 
     # コマンドメッセージを処理
-    def command_message(self, target, channel_id, text):
+    def command_message(self, sns_name, channel_id, text):
+        message = ''
         if text[0:5] == '$info':            # 使用可能なコマンドを表示
-            text = '$info:機能表示\n'\
+            message = '$info:機能表示\n'\
                 '$create:新規CLASグループを作成\n'\
                 '$getID:所属CLASグループのID表示\n'\
                 '$join [ID]:CLASグループに参加\n'\
                 '$leave:CLASグループを脱退\n'\
                 '$searchText [キーワード]:キーワードを用いて検索\n'\
                 '$searchUser [ユーザー名]:ユーザー名で検索'
-            return text
         elif text[0:8] == '$create':        # 新規CLASグループの作成
-            return str(self.create_group(target, channel_id))
+            message = str(self.create_group(sns_name, channel_id))
         elif text[0:7] == '$getID':         # 所属しているCLASグループのIDを取得
-            return str(self.get_clas_id(channel_id))
+            message = str(self.get_clas_id(channel_id))
         elif text[0:6] == '$join ':         # CLASグループに参加
-            return self.join_group(text[6:], target, channel_id)
+            message = self.join_group(text[6:], sns_name, channel_id)
         elif text[0:6] == '$leave':         # 参加しているCLASグループから脱退
-            return self.leave_group(channel_id, target)
+            message = self.leave_group(channel_id, sns_name)
         elif text[0:12] == '$searchText ':  # データベースからテキスト内容が一致するメッセージを取得
-            text = '\n'.join(self.search_database(channel_id, 1, text[12:]))
-            return text
+            message = '\n'.join(self.search_database(channel_id, 1, text[12:]))
         elif text[0:12] == '$searchUser ':  # データベースからユーザー名が一致するメッセージを取得
-            text = '\n'.join(self.search_database(channel_id, 0, text[12:]))
-            return text
+            message = '\n'.join(self.search_database(channel_id, 0, text[12:]))
         else:
-            return 'そのコマンドは存在しません'
+            message = 'そのコマンドは存在しません'
+        return message
 
 app = Flask(__name__)
 
@@ -170,14 +160,9 @@ clas = CLAS(slack_token)
 # Lineのコールバックメソッド
 @app.route("/callback", methods=['POST'])
 def callback():
-    # リクエストヘッダーから署名検証のための値を取得
     signature = request.headers['X-Line-Signature']
-
-    # リクエストボディを取得
     body = request.get_data(as_text=True)
     app.logger.info("Request body: " + body)
-
-    # 署名を検証し、問題なければhandleに定義されている関数を呼び出す
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
