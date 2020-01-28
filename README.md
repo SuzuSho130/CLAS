@@ -14,7 +14,7 @@ SNSアプリ「LINE」と「Slack」間でメッセージを共有できるア�
 
 ## Image
 
-![CLAS](https://github.com/SuzuSho130/CLAS/blob/images/CLAS.png)
+<img src="https://github.com/SuzuSho130/CLAS/blob/images/CLAS.png" width="320px">
 
 ## Requirement
 
