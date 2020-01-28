@@ -1,6 +1,6 @@
 from flask import Flask, request, abort
 from slackbot.bot import Bot
-from slackbot.bot import listen_to      # チャネル内発言で反応するデコーダ
+from slackbot.bot import listen_to
 import requests
 import threading
 from linebot import LineBotApi, WebhookHandler
