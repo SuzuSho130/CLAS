@@ -47,13 +47,13 @@ requests 2.21.0
 
 |コマンド|機能|
 ----|----
-|$info|機能表示|
+|$info|CLASの使用可能な機能を表示|
 |$create|新規CLASグループを作成|
-|$getID|所属CLASグループのID表示|
+|$getID|所属CLASグループのIDを表示|
 |$join [ID]|CLASグループに参加|
 |$leave|CLASグループを脱退|
-|$searchText [キーワード]|[キーワード]:キーワードを用いて検索|
-|$searchUser [ユーザー名]|[ユーザー名]:ユーザー名で検索|
+|$searchText [キーワード]|キーワードを用いて検索|
+|$searchUser [ユーザー名]|ユーザー名で検索|
 
 ### CLASグループについて
 
